@@ -93,7 +93,7 @@ class inventory
 
   int position_by_item(item* it);  // looks up an item (via pointer comparison)
   int position_by_type(itype_id type);
-  int position_by_letter(char ch);
+  int position_by_letter(char ch) const;
 
   std::vector<std::pair<item*, int> > all_items_by_type(itype_id type);
   std::vector<item*> all_ammo(const ammotype &type);
@@ -162,7 +162,7 @@ class inventory
   // true, empty (invlet = 0) otherwise.
   void assign_empty_invlet(item &it, bool force = false);
 
-  std::set<char> allocated_invlets();
+  std::set<char> allocated_invlets() const;
  private:
   // For each item ID, store a set of "favorite" inventory letters.
   std::map<std::string, std::vector<char> > invlet_cache;

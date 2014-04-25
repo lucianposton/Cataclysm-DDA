@@ -887,10 +887,10 @@ item &inventory::find_item(int position)
     return iter->front();
 }
 
-int inventory::position_by_letter(char ch)
+int inventory::position_by_letter(char ch) const
 {
     int i = 0;
-    for (invstack::iterator iter = items.begin(); iter != items.end(); ++iter) {
+    for (invstack::const_iterator iter = items.begin(); iter != items.end(); ++iter) {
         if (iter->begin()->invlet == ch) {
             return i;
         }
@@ -1501,7 +1501,7 @@ void inventory::assign_empty_invlet(item &it, bool force)
     debugmsg("could not find a hotkey for %s", it.tname().c_str());
 }
 
-std::set<char> inventory::allocated_invlets() {
+std::set<char> inventory::allocated_invlets() const {
     char ch;
     std::set<char> invlets;
 

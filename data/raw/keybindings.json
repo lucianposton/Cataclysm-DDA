@@ -311,6 +311,90 @@
     },
     {
         "type" : "keybinding",
+        "id": "SCROLL_DOWN",
+        "category": "INVENTORY",
+        "name": "Scroll down",
+        "bindings":[
+            {
+                "input_method":"keyboard",
+                "key":"DOWN"
+            }
+        ]
+    },
+    {
+        "type" : "keybinding",
+        "id": "SCROLL_UP",
+        "category": "INVENTORY",
+        "name": "Scroll up",
+        "bindings":[
+            {
+                "input_method":"keyboard",
+                "key":"UP"
+            }
+        ]
+    },
+    {
+        "type" : "keybinding",
+        "id": "NEXT_TAB",
+        "category": "INVENTORY",
+        "name": "Go to next page",
+        "bindings":[
+            {
+                "input_method":"keyboard",
+                "key":"NPAGE"
+            },
+            {
+                "input_method":"keyboard",
+                "key":">"
+            }
+        ]
+    },
+    {
+        "type" : "keybinding",
+        "id": "PREV_TAB",
+        "category": "INVENTORY",
+        "name": "Go to previous page",
+        "bindings":[
+            {
+                "input_method":"keyboard",
+                "key":"PPAGE"
+            },
+            {
+                "input_method":"keyboard",
+                "key":"<"
+            }
+        ]
+    },
+    {
+        "type" : "keybinding",
+        "id": "MODE_SWITCH",
+        "category": "INVENTORY",
+        "name": "Switch mode",
+        "bindings":[
+            {
+                "input_method":"keyboard",
+                "key":"TAB"
+            }
+        ]
+    },
+    {
+        "type" : "keybinding",
+        "id": "CONFIRM",
+        "category": "INVENTORY",
+        "name": "Confirm choice",
+        "bindings":[
+            {
+                "input_method":"keyboard",
+                "key":"RETURN"
+            },
+            {
+                "input_method":"keyboard",
+                "key":"RIGHT"
+            }
+        ]
+    },
+    {
+        "type" : "keybinding",
         "id": "HELP",
         "category": "SORT_ARMOR",
         "name": "Display Help",

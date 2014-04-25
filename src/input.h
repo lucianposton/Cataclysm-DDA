@@ -418,6 +418,7 @@ public:
     std::string press_x(const std::string &action_id) const;
     std::string press_x(const std::string &action_id, const std::string &key_bound, const std::string &key_unbound) const;
     std::string press_x(const std::string &action_id, const std::string &key_bound_pre, const std::string &key_bound_suf, const std::string &key_unbound) const;
+    std::string press_y(const std::string &action_id, const std::string &key_bound_pre, const std::string &key_bound_suf) const;
 
     /**
      * Keys (and only keys, other input types are not included) that

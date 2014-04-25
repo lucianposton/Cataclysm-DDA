@@ -302,7 +302,6 @@ public:
   int inv_type(std::string title, item_cat inv_item_type = IC_NULL);
   int inv_for_liquid(const item &liquid, const std::string title, bool auto_choose_single);
   int inv_for_flag(const std::string flag, const std::string title, bool auto_choose_single);
-  int display_slice(indexed_invslice&, const std::string&);
   int inventory_item_menu(int pos, int startx = 0, int width = 50, int position = 0);
   // Same as other multidrop, only the dropped_worn vector
   // is merged into the result.

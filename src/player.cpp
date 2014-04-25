@@ -5981,7 +5981,7 @@ void player::drench_mut_calc()
     }
 }
 
-int player::weight_carried()
+int player::weight_carried() const
 {
     int ret = 0;
     ret += weapon.weight();
@@ -5993,7 +5993,7 @@ int player::weight_carried()
     return ret;
 }
 
-int player::volume_carried()
+int player::volume_carried() const
 {
     return inv.volume();
 }
@@ -6662,7 +6662,7 @@ char player::position_to_invlet(int position) {
     return i_at(position).invlet;
 }
 
-int player::invlet_to_position(char invlet) {
+int player::invlet_to_position(char invlet) const {
     if (weapon.invlet == invlet)
      return -1;
     for (int i = 0; i < worn.size(); i++) {
@@ -7137,7 +7137,7 @@ bool player::has_item(char let)
  return (has_weapon_or_armor(let) || !inv.item_by_letter(let).is_null());
 }
 
-std::set<char> player::allocated_invlets() {
+std::set<char> player::allocated_invlets() const {
     std::set<char> invlets = inv.allocated_invlets();
 
     if (weapon.invlet != 0) {

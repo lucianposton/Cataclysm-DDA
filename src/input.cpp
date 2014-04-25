@@ -1199,14 +1199,20 @@ std::string input_context::press_x(const std::string &action_id, const std::stri
     return press_x(action_id, key_bound, "", key_unbound);
 }
 
+std::string input_context::press_y(const std::string &action_id, const std::string &key_bound_pre, const std::string &key_bound_suf) const
+{
+    const std::string key_unbound = _("\"") + get_action_name(action_id) + _("\" is unbound");
+    return press_x(action_id, key_bound_pre, key_bound_suf, key_unbound);
+}
+
 // TODO: merge this with input_context::get_desc
 std::string input_context::press_x(const std::string &action_id, const std::string &key_bound_pre, const std::string &key_bound_suf, const std::string &key_unbound) const
 {
     if (action_id == "ANY_INPUT") {
-        return _("any key");
+        return key_bound_pre + _("any key") + key_bound_suf;
     }
     if (action_id == "COORDINATE") {
-        return _("mouse movement");
+        return key_bound_pre + _("mouse movement") + key_bound_suf;
     }
     const input_manager::t_input_event_list &events = inp_mngr.get_input_for_action(action_id, category);
     if (events.empty()) {

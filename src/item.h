@@ -70,7 +70,7 @@ public:
  item in_its_container(std::map<std::string, itype*> *itypes);
 
     nc_color color(player *u) const;
-    nc_color color_in_inventory();
+    nc_color color_in_inventory() const;
     std::string tname(unsigned int quantity = 1, bool with_prefix = true); // item name (includes damage, freshness, etc)
     std::string display_name(unsigned int quantity = 1); // name for display (includes charges, etc)
     void use();
@@ -198,7 +198,7 @@ public:
  bool has_quality(std::string quality_id) const;
  bool has_quality(std::string quality_id, int quality_value) const;
  bool has_technique(std::string t);
- int has_gunmod(itype_id type);
+ int has_gunmod(itype_id type) const;
  item* active_gunmod();
  item const* inspect_active_gunmod() const;
  bool goes_bad();

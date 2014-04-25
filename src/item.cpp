@@ -1133,7 +1133,7 @@ nc_color item::color(player *u) const
     return ret;
 }
 
-nc_color item::color_in_inventory()
+nc_color item::color_in_inventory() const
 {
     // This should be relevant only for the player,
     // npcs don't care about the color
@@ -1237,25 +1237,23 @@ std::string item::tname( unsigned int quantity, bool with_prefix )
         maintext = type->nname(quantity);
     }
 
-    item* food = NULL;
     it_comest* food_type = NULL;
     std::string tagtext = "";
     std::string toolmodtext = "";
     ret.str("");
     if (is_food())
     {
-        food = this;
         food_type = dynamic_cast<it_comest*>(type);
 
         if (food_type->spoils != 0)
         {
-            if(food->rotten()) {
+            if(rotten()) {
                 ret << _(" (rotten)");
             } else if ( rot < 100 ) {
                 ret << _(" (fresh)");
             }
         }
-        if (food->has_flag("HOT"))
+        if (has_flag("HOT"))
             ret << _(" (hot)");
     }
 
@@ -1603,7 +1601,7 @@ bool item::has_technique(matec_id tech)
     return type->techniques.count(tech);
 }
 
-int item::has_gunmod(itype_id mod_type)
+int item::has_gunmod(itype_id mod_type) const
 {
     if (!is_gun())
         return -1;

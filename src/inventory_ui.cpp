@@ -11,9 +11,148 @@
 #include <sstream>
 #include <algorithm>
 
+namespace {
+
 typedef std::vector<item_category> CategoriesVector;
 
-std::vector<int> find_firsts(indexed_invslice &slice, CategoriesVector &CATEGORIES)
+const int right_column_offset = 45;
+
+bool is_first_in_category(int i, const std::vector<int> &firsts, const CategoriesVector &categories)
+{
+    for (size_t j = 1; j < categories.size(); ++j) {
+        if (i == firsts[j - 1]) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Prints the navigation help message
+ */
+void print_navigation_mode_message(
+        WINDOW* window,
+        int y,
+        int x,
+        bool is_category_mode,
+        bool can_page_forward,
+        bool can_page_backward,
+        const input_context &input_context)
+{
+    const std::string str_back = input_context.press_y("PREV_TAB", _("Press "), _(" to go back"));
+    const std::string str_more = input_context.press_y("NEXT_TAB", _("Press "), _(" for more items"));
+
+    std::string navigation_mode_message;
+    nc_color msg_color;
+    if (is_category_mode) {
+        navigation_mode_message = input_context.press_y("MODE_SWITCH", _("Category selection; Press "), _(" to switch the mode."));
+        msg_color = c_white_red;
+    } else {
+        navigation_mode_message = input_context.press_y("MODE_SWITCH", _("Item selection; Press "), _(" to switch the mode."));
+        msg_color = h_white;
+    }
+
+    // TODO fix this craziness
+    for (int i = 0; i < utf8_width(str_more.c_str()); i++) {
+        mvwputch(window, y, x + i + utf8_width(str_back.c_str()) + 2, c_black, ' ');
+    }
+    for (int i = 0; i < utf8_width(str_back.c_str()); i++) {
+        mvwputch(window, y, x + i, c_black, ' ');
+    }
+
+    // blanks nav mode message
+    for (int i = utf8_width(str_back.c_str()) + 2 + utf8_width(str_more.c_str());
+            i < FULL_SCREEN_WIDTH; i++) {
+        mvwputch(window, y, x + i, c_black, ' ');
+    }
+
+    mvwprintz(
+            window,
+            y,
+ // TODO use x?
+            FULL_SCREEN_WIDTH - utf8_width(navigation_mode_message.c_str()),
+            msg_color,
+            navigation_mode_message.c_str());
+
+    if (can_page_backward) {
+        mvwprintw(window, y, x, str_back.c_str());
+    }
+
+    if (can_page_forward) {
+        mvwprintw(window, y, x + utf8_width(str_back.c_str()) + 2, str_more.c_str());
+    }
+}
+
+void clear_window_region(WINDOW* window, int x, int y, size_t width, int height)
+{
+    const std::string blank_line(width, '@');
+    for (int i = y; i < y + height; ++i) {
+        mvwprintz(window, i, x, c_red, blank_line.c_str());
+    }
+}
+
+void crazy_time(
+        WINDOW* window,
+        const size_t y,
+        const size_t x,
+        const size_t height,
+        const size_t width,
+        const size_t item_index_page_offset,
+        const size_t selected,
+        const bool is_category_mode,
+        const indexed_invslice &slice,
+        const std::vector<int> &firsts,
+        const CategoriesVector &CATEGORIES)
+{
+    for (size_t cur_it = item_index_page_offset, cur_line = y;
+            cur_it < slice.size() && cur_line < y + height;
+            ++cur_it, ++cur_line) {
+        const bool is_first = is_first_in_category(cur_it, firsts, CATEGORIES);
+        if (is_first) {
+            if (cur_line + 1 >= y + height) {
+                // If printing the category header and its subsequent first
+                // item would cause too many lines to be printed, bail.
+                return;
+            }
+            const std::string &item_category = slice[cur_it].first->front().get_category().name;
+            mvwprintz(window, cur_line, x, c_magenta, item_category.substr(0, width).c_str());
+            cur_line += 1;
+        }
+
+        if (cur_it < slice.size()) {
+            item &it = slice[cur_it].first->front();
+            nc_color selected_line_color = is_category_mode ? c_white_red : h_white;
+            const char invlet = it.invlet == 0 ? ' ' : it.invlet;
+            mvwputch(
+                    window,
+                    cur_line,
+                    x,
+                    (cur_it == selected ? selected_line_color : c_white),
+                    invlet);
+
+            std::ostringstream buffer;
+            buffer << ' ';
+            if(slice[cur_it].first->size() > 1) {
+                buffer << slice[cur_it].first->size() << ' ';
+            }
+
+            buffer << it.display_name(slice[cur_it].first->size());
+            // subtract 1 because we previously printed one character for the
+            // hotkey character
+            const std::string truncated_item_name = buffer.str().substr(0, width - 1);
+            mvwprintz(
+                    window,
+                    cur_line,
+                    x + 1,
+                    (cur_it == selected ? selected_line_color : it.color_in_inventory()),
+                    "%s",
+                    truncated_item_name.c_str());
+        }
+    }
+}
+
+std::vector<int> find_firsts(const indexed_invslice &slice, CategoriesVector &CATEGORIES)
 {
     static const item_category category_on_ground(
         "GROUND:",
@@ -31,7 +170,7 @@ std::vector<int> find_firsts(indexed_invslice &slice, CategoriesVector &CATEGORI
             CATEGORIES.push_back(category);
         }
     }
-    for (int i = 0; i < (CATEGORIES.size() - 1); i++) {
+    for (size_t i = 0; i < (CATEGORIES.size() - 1); i++) {
         firsts.push_back(-1);
     }
 
@@ -86,12 +225,10 @@ void print_inv_weight_vol(WINDOW *w_inv, int weight_carried, int vol_carried, in
     wprintw(w_inv, "/%-3d", vol_capacity - 2);
 }
 
-static const int right_column_offset = 45;
-
 // dropped_weapon==0 -> weapon is not dropped
 // dropped_weapon==-1 -> weapon is dropped (whole stack)
 // dropped_weapon>0 -> part of the weapon stack is dropped
-void print_inv_statics(WINDOW *w_inv, std::string title,
+void print_inv_statics(WINDOW *w_inv, std::string title, player &player,
                        std::vector<char> dropped_items, int dropped_weapon)
 {
     // Print our header
@@ -99,73 +236,103 @@ void print_inv_statics(WINDOW *w_inv, std::string title,
     if(title.compare("Multidrop:") == 0)
         mvwprintw(w_inv, 1, 0, "To drop x items, type a number and then the item hotkey.");
 
-    print_inv_weight_vol(w_inv, g->u.weight_carried(), g->u.volume_carried(),
+    print_inv_weight_vol(w_inv, player.weight_carried(), player.volume_carried(),
                          calc_volume_capacity(dropped_items));
 
     // Print our weapon
     mvwprintz(w_inv, 2, right_column_offset, c_magenta, _("WEAPON:"));
-    if (g->u.is_armed()) {
+    if (player.is_armed()) {
         if (dropped_weapon != 0)
-            mvwprintz(w_inv, 3, right_column_offset, c_white, "%c %c %s", g->u.weapon.invlet,
+            mvwprintz(w_inv, 3, right_column_offset, c_white, "%c %c %s", player.weapon.invlet,
                       dropped_weapon == -1 ? '+' : '#',
-                      g->u.weapname().c_str());
+                      player.weapname().c_str());
         else
-            mvwprintz(w_inv, 3, right_column_offset, g->u.weapon.color_in_inventory(), "%c - %s",
-                      g->u.weapon.invlet, g->u.weapname().c_str());
+            mvwprintz(w_inv, 3, right_column_offset, player.weapon.color_in_inventory(), "%c - %s",
+                      player.weapon.invlet, player.weapname().c_str());
     } else {
-        mvwprintz(w_inv, 3, right_column_offset, c_ltgray, g->u.weapname().c_str());
+        mvwprintz(w_inv, 3, right_column_offset, c_ltgray, player.weapname().c_str());
     }
     // Print worn items
-    if (!g->u.worn.empty()) {
+    if (!player.worn.empty()) {
         mvwprintz(w_inv, 5, right_column_offset, c_magenta, _("ITEMS WORN:"));
     }
-    for (size_t i = 0; i < g->u.worn.size(); i++) {
+    for (size_t i = 0; i < player.worn.size(); i++) {
         bool dropped_armor = false;
         for (size_t j = 0; j < dropped_items.size() && !dropped_armor; j++) {
-            if (dropped_items[j] == g->u.worn[i].invlet) {
+            if (dropped_items[j] == player.worn[i].invlet) {
                 dropped_armor = true;
             }
         }
         if (dropped_armor)
-            mvwprintz(w_inv, 6 + i, right_column_offset, c_white, "%c + %s", g->u.worn[i].invlet,
-                      g->u.worn[i].display_name().c_str());
+            mvwprintz(w_inv, 6 + i, right_column_offset, c_white, "%c + %s", player.worn[i].invlet,
+                      player.worn[i].display_name().c_str());
         else
-            mvwprintz( w_inv, 6 + i, right_column_offset, g->u.worn[i].color_in_inventory(),
-                       "%c - %s", g->u.worn[i].invlet, g->u.worn[i].display_name().c_str() );
+            mvwprintz( w_inv, 6 + i, right_column_offset, player.worn[i].color_in_inventory(),
+                       "%c - %s", player.worn[i].invlet, player.worn[i].display_name().c_str() );
     }
 
-    mvwprintw(w_inv, 1, 61, _("Hotkeys:  %d/%d "), g->u.allocated_invlets().size(), inv_chars.size());
+    mvwprintw(w_inv, 1, 61, _("Hotkeys:  %d/%d "), player.allocated_invlets().size(), inv_chars.size());
 }
 
-int game::display_slice(indexed_invslice &slice, const std::string &title)
+std::vector<int> calculate_page_offsets(int max_it, int lines_per_page, const std::vector<int> &firsts, const CategoriesVector &CATEGORIES)
 {
-    WINDOW* w_inv = newwin(TERMY, TERMX, VIEW_OFFSET_Y, VIEW_OFFSET_X);
-    const int maxitems = TERMY - 5;
+    std::vector<int> page_item_offsets;
+    int category_lines_per_page = 0;
 
-    int ch = (int)'.';
-    int start = 0, cur_it = 0, max_it;
+    // TODO handle when max_it == -1
+    page_item_offsets.push_back(0);
+    for (int i = 0; i <= max_it; ++i) {
+        const bool is_first = is_first_in_category(i, firsts, CATEGORIES);
+        if (is_first) {
+            category_lines_per_page += 1;
+        }
+
+        if (i - page_item_offsets.back() + 1 + category_lines_per_page > lines_per_page) {
+            page_item_offsets.push_back(i);
+            if (is_first) {
+                category_lines_per_page = 1;
+            } else {
+                category_lines_per_page = 0;
+            }
+        }
+    }
+
+    return page_item_offsets;
+}
+
+int display_slice(WINDOW* window, player &player, const indexed_invslice &slice, const std::string &title)
+{
+    debugmsg("x:%d y:%d width:%d height:%d cursorx:%d cursory:%d", window->x, window->y, window->width, window->height, window->cursorx, window->cursory);
+    debugmsg("x:%d y:%d width:%d height:%d", TERMX, TERMY, VIEW_OFFSET_X, VIEW_OFFSET_Y);
     std::vector<char> null_vector;
-    print_inv_statics(w_inv, title, null_vector, 0);
-    // Gun, ammo, weapon, armor, food, tool, book, other
+    print_inv_statics(window, title, player, null_vector, 0);
 
     CategoriesVector CATEGORIES;
     std::vector<int> firsts = find_firsts(slice, CATEGORIES);
 
-    int selected =- 1;
-    int selected_pos = INT_MIN;
+    const int lines_per_page = TERMY - 3;
+    const int columns = 44;
+    const int max_it = slice.size() - 1;
+
+    int selected_item_index = 0;
+    int selection = INT_MIN;
 
     int next_category_at = 0;
     int prev_category_at = 0;
-    bool inCategoryMode = false;
+    bool is_category_mode = false;
+
+    // Need at least 2 lines to display category header and item
+    if (lines_per_page < 2) {
+        debugmsg("Screen too small to draw inventory window");
+        return selection;
+    }
 
     std::vector<int> category_order;
     category_order.reserve(firsts.size());
 
-    std::string str_back = _("< Go Back");
-    std::string str_more = _("> More items");
-
-    // Items are not guaranteed to be in the same order as their categories, in fact they almost never are.
-    // So we sort the categories by which items actually show up first in the inventory.
+    // Items are not guaranteed to be in the same order as their categories,
+    // in fact they almost never are. So we sort the categories by which items
+    // actually show up first in the inventory.
     for (size_t current_item = 0; current_item < slice.size(); ++current_item) {
         for (size_t i = 1; i < CATEGORIES.size(); ++i) {
             if ((int)current_item == firsts[i - 1]) {
@@ -174,178 +341,129 @@ int game::display_slice(indexed_invslice &slice, const std::string &title)
         }
     }
 
-    do {
-        if (( ch == '<' || ch == KEY_PPAGE ) && start > 0) { // Clear lines and shift
-            for (int i = 1; i < maxitems + 4; i++) {
-                mvwprintz(w_inv, i, 0, c_black, "                                             ");
-            }
-            start -= maxitems;
-            if (start < 0) {
-                start = 0;
-            }
-            for (int i = 0; i < utf8_width(str_back.c_str()); i++) {
-                mvwputch(w_inv, maxitems + 4, i, c_black, ' ');
-            }
-            if ( selected > -1 ) {
-                selected = start;    // oy, the cheese
-            }
-        }
-        if (( ch == '>' || ch == KEY_NPAGE ) && cur_it < (ssize_t)slice.size()) { // Clear lines and shift
-            start = cur_it;
-            for (int i = 0; i < utf8_width(str_more.c_str()); i++) {
-                mvwputch(w_inv, maxitems + 4, i + utf8_width(str_back.c_str()) + 2, c_black, ' ');
-            }
-            for (int i = 1; i < maxitems + 4; i++) {
-                mvwprintz(w_inv, i, 0, c_black, "                                             ");
-            }
-            if ( selected < start && selected > -1 ) {
-                selected = start;
-            }
-        }
-        int cur_line = 2;
-        max_it = 0;
+    std::vector<int> page_item_offsets = calculate_page_offsets(max_it, lines_per_page, firsts, CATEGORIES);
 
-        // Find the inventory position of the first item in the previous and next category (in relation
-        // to the currently selected category).
-        for (size_t i = 0; i < category_order.size(); ++i) {
-            if (selected > firsts[category_order[i]] && prev_category_at <= firsts[category_order[i]]) {
-                prev_category_at = firsts[category_order[i]];
-            }
+    input_context ctxt("INVENTORY");
+    ctxt.register_action("ANY_INPUT");
+    ctxt.register_action("SCROLL_UP");
+    ctxt.register_action("SCROLL_DOWN");
+    ctxt.register_action("PREV_TAB");
+    ctxt.register_action("NEXT_TAB");
+    ctxt.register_action("MODE_SWITCH");
+    ctxt.register_action("CONFIRM");
+    ctxt.register_action("QUIT");
+    ctxt.register_action("HELP_KEYBINDINGS");
 
-            if (selected < firsts[category_order[i]] && next_category_at <= selected) {
-                next_category_at = firsts[category_order[i]];
-            }
-        }
+    char ch;
+    std::string action;
 
-        for (cur_it = start; cur_it < start + maxitems && cur_line < maxitems + 3; cur_it++) {
-            // Clear the current line;
-            mvwprintw(w_inv, cur_line, 0, "                                             ");
+    while (action != "QUIT" && (selection == INT_MIN || (action != "CONFIRM" && action != "ANY_INPUT"))) {
 
-            for (size_t i = 1; i < CATEGORIES.size(); i++) {
-                if (cur_it == firsts[i - 1]) {
-                    mvwprintz(w_inv, cur_line, 0, c_magenta, CATEGORIES[i].name.c_str());
-                    cur_line++;
+        // TODO: undefined when zero items?
+        std::vector<int>::iterator current_page = std::upper_bound(page_item_offsets.begin(), page_item_offsets.end(), selected_item_index) - 1;
+
+        if (is_category_mode) {
+            next_category_at = 0;
+            prev_category_at = category_order.empty() ? 0 : firsts[category_order.back()];
+
+            // Find the inventory position of the first item in the previous and next category (in relation
+            // to the currently selected_item_index category).
+            for (size_t i = 0; i < category_order.size(); ++i) {
+                const int prev_index_of_first_in_category = firsts[category_order[category_order.size()-1-i]];
+                if (selected_item_index > prev_index_of_first_in_category
+                        && prev_category_at >= selected_item_index) {
+                    prev_category_at = prev_index_of_first_in_category;
+                }
+
+                const int next_index_of_first_in_category = firsts[category_order[i]];
+                if (selected_item_index < next_index_of_first_in_category
+                        && next_category_at <= selected_item_index) {
+                    next_category_at = next_index_of_first_in_category;
                 }
             }
-
-            if (cur_it < (ssize_t)slice.size()) {
-                item &it = slice[cur_it].first->front();
-                if(cur_it == selected) {
-                    selected_pos = slice[cur_it].second;
-                }
-                nc_color selected_line_color = inCategoryMode ? c_white_red : h_white;
-                const char invlet = it.invlet == 0 ? ' ' : it.invlet;
-                // Use width of the column minus two for the hotkey and leading space,
-                // and one for a space on the right.
-                const std::string truncated_item_name = std::string(
-                    (it.display_name(slice[cur_it].first->size()).c_str()) ).substr( 0, right_column_offset - 3 );
-                mvwputch(w_inv, cur_line, 0,
-                         (cur_it == selected ? selected_line_color : c_white), invlet);
-                if(slice[cur_it].first->size() > 1) {
-                    mvwprintz(w_inv, cur_line, 1,
-                              (cur_it == selected ? selected_line_color : it.color_in_inventory()),
-                              " %d %s", slice[cur_it].first->size(), truncated_item_name.c_str() );
-                } else {
-                    mvwprintz(w_inv, cur_line, 1,
-                              (cur_it == selected ? selected_line_color : it.color_in_inventory()),
-                              " %s", truncated_item_name.c_str() );
-                }
-                cur_line++;
-                max_it = cur_it;
-            }
         }
 
-        std::string msg_str;
-        nc_color msg_color;
-        if (inCategoryMode) {
-            msg_str = _("Category selection; Press [TAB] to switch the mode.");
-            msg_color = c_white_red;
-        } else {
-            msg_str = _("Item selection; Press [TAB] to switch the mode.");
-            msg_color = h_white;
-        }
-        for (int i = utf8_width(str_back.c_str()) + 2 + utf8_width(str_more.c_str());
-             i < FULL_SCREEN_WIDTH; i++) {
-                 mvwputch(w_inv, maxitems + 4, i, c_black, ' ');
-        }
-        mvwprintz(w_inv, maxitems + 4, FULL_SCREEN_WIDTH - utf8_width(msg_str.c_str()),
-                  msg_color, msg_str.c_str());
+        clear_window_region(window, 0, 2, columns, lines_per_page);
+        crazy_time(
+                window,
+                2,
+                0,
+                lines_per_page,
+                columns,
+                *current_page,
+                selected_item_index,
+                is_category_mode,
+                slice,
+                firsts,
+                CATEGORIES);
 
-        if (start > 0) {
-            mvwprintw(w_inv, maxitems + 4, 0, str_back.c_str());
-        }
-        if (cur_it < (ssize_t)slice.size()) {
-            mvwprintw(w_inv, maxitems + 4, utf8_width(str_back.c_str()) + 2, str_more.c_str());
-        }
-        wrefresh(w_inv);
+        print_navigation_mode_message(
+                window,
+                lines_per_page + 4,
+                0, // TODO should specify limiting width
+                is_category_mode,
+                *current_page + lines_per_page <= max_it,
+                *current_page > 0,
+                ctxt);
 
-        input_context ctxt("INVENTORY");
-        ctxt.register_action("ANY_INPUT");
-        ctxt.handle_input();
+        wrefresh(window);
+
+        action = ctxt.handle_input();
         ch = ctxt.get_raw_input().get_first_input();
 
-        if (ch == '\t') {
-            inCategoryMode = !inCategoryMode;
-        } else if ( ch == KEY_DOWN ) {
-            if ( selected < 0 ) {
-                selected = start;
+        if (action == "MODE_SWITCH") {
+            is_category_mode = !is_category_mode;
+        } else if (action == "SCROLL_DOWN") {
+            if (is_category_mode) {
+                selected_item_index = next_category_at;
             } else {
-                if (inCategoryMode) {
-                    if( category_order.size() &&
-                        selected < firsts[category_order[category_order.size() - 1]] ) {
-                        selected = next_category_at;
-                    } else {
-                        selected = 0;
-                    }
-                } else {
-                    selected++;
-                }
-
-                next_category_at = prev_category_at = 0;
+                selected_item_index += 1;
             }
-
-            if ( selected > max_it ) {
-                if( cur_it < u.inv.size() ) {
-                    ch = '>';
-                } else {
-                    selected = u.inv.size() - 1; // wraparound?
-                }
+            if (selected_item_index > max_it) {
+                // wrap around the first item
+                selected_item_index = 0;
             }
-        } else if ( ch == KEY_UP ) {
-            inCategoryMode ? selected = prev_category_at : selected--;
-            next_category_at = prev_category_at = 0;
-
-            if ( selected < -1 ) {
-                selected = -1; // wraparound?
-            } else if ( selected < start ) {
-                if ( start > 0 ) {
-                    for (int i = 1; i < maxitems + 4; i++) {
-                        mvwprintz(w_inv, i, 0, c_black, "                                             ");
-                    }
-                    start -= maxitems;
-                    if (start < 0) {
-                        start = 0;
-                    }
-                    for (int i = 0; i < utf8_width(str_back.c_str()); i++) {
-                        mvwputch(w_inv, maxitems + 4, i, c_black, ' ');
-                    }
-                }
+        } else if (action == "SCROLL_UP") {
+            if (is_category_mode) {
+                selected_item_index = prev_category_at;
+            } else {
+                selected_item_index -= 1;
             }
-        } else if ( ch == '\n' || ch == KEY_RIGHT ) {
-            ch = '\n';
+            if (selected_item_index < 0) {
+                // wrap around to last item
+                selected_item_index = max_it;
+            }
+        } else if (action == "CONFIRM") {
+            selection = slice[selected_item_index].second;
+        } else if (action == "ANY_INPUT") {
+            selection = player.invlet_to_position(ch);
+        } else if (action == "NEXT_TAB" && !page_item_offsets.empty()) {
+            std::vector<int>::iterator next_page = current_page + 1;
+            if (next_page == page_item_offsets.end()) {
+                // wrap around to first item
+                next_page = page_item_offsets.begin();
+            }
+            if (next_page != current_page) {
+                selected_item_index = *next_page;
+            }
+        } else if (action == "PREV_TAB" && !page_item_offsets.empty()) {
+            std::vector<int>::iterator previous_page;
+            if (current_page == page_item_offsets.begin()) {
+                // wrap around to last item
+                previous_page = page_item_offsets.end() - 1;
+            } else {
+                previous_page = current_page - 1;
+            }
+            if (previous_page != current_page) {
+                selected_item_index = *previous_page;
+            }
         }
-
-    } while (ch == '<' || ch == '>' || ch == '\t' || ch == KEY_NPAGE || ch == KEY_PPAGE ||
-             ch == KEY_UP || ch == KEY_DOWN );
-    werase(w_inv);
-    delwin(w_inv);
-    refresh_all();
-    if (ch == '\n') {  // user hit enter (or equivalent).
-        return selected_pos;
-    } else {  // user hit an invlet (or exited out, which will resolve to INT_MIN)
-        return u.invlet_to_position((char)ch);
     }
+
+    return selection;
 }
+
+} // namespace
 
 // Display current inventory.
 int game::inv(const std::string &title)
@@ -353,7 +471,12 @@ int game::inv(const std::string &title)
     u.inv.restack(&u);
     u.inv.sort();
     indexed_invslice slice = u.inv.slice_filter();
-    return display_slice(slice , title);
+    WINDOW* window = newwin(TERMY, TERMX, VIEW_OFFSET_Y, VIEW_OFFSET_X);
+    int selected_position = display_slice(window, u, slice , title);
+    werase(window);
+    delwin(window);
+    refresh_all();
+    return selected_position;
 }
 
 int game::inv_activatable(std::string title)
@@ -361,7 +484,12 @@ int game::inv_activatable(std::string title)
     u.inv.restack(&u);
     u.inv.sort();
     indexed_invslice activatables = u.inv.slice_filter_by_activation(u);
-    return display_slice(activatables, title);
+    WINDOW* window = newwin(TERMY, TERMX, VIEW_OFFSET_Y, VIEW_OFFSET_X);
+    int selected_position = display_slice(window, u, activatables, title);
+    werase(window);
+    delwin(window);
+    refresh_all();
+    return selected_position;
 }
 
 int game::inv_type(std::string title, item_cat inv_item_type)
@@ -369,7 +497,12 @@ int game::inv_type(std::string title, item_cat inv_item_type)
     u.inv.restack(&u);
     u.inv.sort();
     indexed_invslice reduced_inv = u.inv.slice_filter_by_category(inv_item_type, u);
-    return display_slice(reduced_inv, title);
+    WINDOW* window = newwin(TERMY, TERMX, VIEW_OFFSET_Y, VIEW_OFFSET_X);
+    int selected_position = display_slice(window, u, reduced_inv, title);
+    werase(window);
+    delwin(window);
+    refresh_all();
+    return selected_position;
 }
 
 int game::inv_for_liquid(const item &liquid, const std::string title, bool auto_choose_single)
@@ -383,7 +516,12 @@ int game::inv_for_liquid(const item &liquid, const std::string title, bool auto_
             return reduced_inv[0].second;
         }
     }
-    return display_slice(reduced_inv, title);
+    WINDOW* window = newwin(TERMY, TERMX, VIEW_OFFSET_Y, VIEW_OFFSET_X);
+    int selected_position = display_slice(window, u, reduced_inv, title);
+    werase(window);
+    delwin(window);
+    refresh_all();
+    return selected_position;
 }
 
 int game::inv_for_flag(const std::string flag, const std::string title, bool auto_choose_single)
@@ -397,7 +535,12 @@ int game::inv_for_flag(const std::string flag, const std::string title, bool aut
             return reduced_inv[0].second;
         }
     }
-    return display_slice(reduced_inv, title);
+    WINDOW* window = newwin(TERMY, TERMX, VIEW_OFFSET_Y, VIEW_OFFSET_X);
+    int selected_position = display_slice(window, u, reduced_inv, title);
+    werase(window);
+    delwin(window);
+    refresh_all();
+    return selected_position;
 }
 
 std::vector<item> game::multidrop()
@@ -424,7 +567,7 @@ std::vector<item> game::multidrop(std::vector<item> &dropped_worn, int &freed_vo
     std::vector<char> dropped_armor; // Always single, not counted
     int dropped_weapon = 0;
     bool warned_about_bionic = false; // Printed add_msg re: dropping bionics
-    print_inv_statics(w_inv, _("Multidrop:"), dropped_armor, dropped_weapon);
+    print_inv_statics(w_inv, _("Multidrop:"), g->u, dropped_armor, dropped_weapon);
     int base_weight = u.weight_carried();
     int base_volume = u.volume_carried();
 
@@ -704,7 +847,7 @@ std::vector<item> game::multidrop(std::vector<item> &dropped_worn, int &freed_vo
                     if (dropped_armor[i] == ch) {
                         dropped_armor.erase(dropped_armor.begin() + i);
                         found = true;
-                        print_inv_statics(w_inv, _("Multidrop:"), dropped_armor, dropped_weapon);
+                        print_inv_statics(w_inv, _("Multidrop:"), g->u, dropped_armor, dropped_weapon);
                     }
                 }
                 if (!found && ch == u.weapon.invlet && !u.weapon.is_null()) {
@@ -729,11 +872,11 @@ std::vector<item> game::multidrop(std::vector<item> &dropped_worn, int &freed_vo
                             dropped_weapon = -1;
                         }
                         count = 0;
-                        print_inv_statics(w_inv, _("Multidrop:"), dropped_armor, dropped_weapon);
+                        print_inv_statics(w_inv, _("Multidrop:"), g->u, dropped_armor, dropped_weapon);
                     }
                 } else if (!found) {
                     dropped_armor.push_back(ch);
-                    print_inv_statics(w_inv, _("Multidrop:"), dropped_armor, dropped_weapon);
+                    print_inv_statics(w_inv, _("Multidrop:"), g->u, dropped_armor, dropped_weapon);
                 }
             } else {
                 int index = -1;
@@ -858,7 +1001,7 @@ void game::compare(int iCompareX, int iCompareY)
     compare_list.resize(u.inv.size() + groundsize, 0);
     std::vector<char> dropped_armor; // Always single, not counted
     int dropped_weapon = 0;
-    print_inv_statics(w_inv, _("Compare:"), dropped_armor, dropped_weapon);
+    print_inv_statics(w_inv, _("Compare:"), g->u, dropped_armor, dropped_weapon);
     // Gun, ammo, weapon, armor, food, tool, book, other
     CategoriesVector CATEGORIES;
     std::vector<int> first = find_firsts(stacks, CATEGORIES);
@@ -996,7 +1139,7 @@ void game::compare(int iCompareX, int iCompareY)
                     }
                 }
 
-                print_inv_statics(w_inv, _("Compare:"), dropped_armor, dropped_weapon);
+                print_inv_statics(w_inv, _("Compare:"), g->u, dropped_armor, dropped_weapon);
             } else {
                 int index = -1;
                 for (size_t i = 0; i < stacks.size(); ++i) {
@@ -1076,7 +1219,7 @@ void game::compare(int iCompareX, int iCompareY)
                                        TERMY - VIEW_OFFSET_Y * 2, sItemCh, vItemCh, vItemLastCh);
 
             wclear(w_inv);
-            print_inv_statics(w_inv, _("Compare:"), dropped_armor, dropped_weapon);
+            print_inv_statics(w_inv, _("Compare:"), g->u, dropped_armor, dropped_weapon);
             bShowCompare = false;
         }
     } while (ch != '\n' && ch != KEY_ESCAPE && ch != ' ');
