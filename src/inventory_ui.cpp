@@ -280,6 +280,7 @@ int game::display_slice(indexed_invslice &slice, const std::string &title)
         wrefresh(w_inv);
 
         input_context ctxt("INVENTORY");
+        ctxt.register_action("QUICK_SELECT");
         ctxt.register_action("ANY_INPUT");
         ctxt.handle_input();
         ch = ctxt.get_raw_input().get_first_input();

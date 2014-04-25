@@ -191,6 +191,17 @@
     },
     {
         "type" : "keybinding",
+        "id": "QUICK_SELECT",
+        "name": "Quick select",
+        "bindings":[
+            {
+                "input_method":"keyboard",
+                "key":"/"
+            }
+        ]
+    },
+    {
+        "type" : "keybinding",
         "id": "ADD_RULE",
         "category": "AUTO_PICKUP",
         "name": "Add rule",
