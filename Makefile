@@ -114,7 +114,8 @@ endif
 ifdef CLANG
   CXX = $(CROSS)clang++
   LD  = $(CROSS)clang++
-  OTHERS = --std=c++98
+  # gnu++98 to have parity with gcc's default standard
+  OTHERS += --std=gnu++98
   WARNINGS = -Wall -Wextra -Wno-switch -Wno-sign-compare -Wno-missing-braces -Wno-unused-parameter -Wno-type-limits -Wno-narrowing
 endif
 
